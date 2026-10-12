@@ -722,6 +722,23 @@ config SENSORS_BME688_THREAD_STACKSIZE
 
 endif # SENSORS_BME688
 
+config SENSORS_CCS811
+	bool "ams CCS811 Gas Sensor"
+	default n
+	select I2C
+	---help---
+		Enable driver for the ams CCS811 digital gas sensor for monitoring
+		indoor air quality (eCO2 and TVOC).
+
+if SENSORS_CCS811
+
+config CCS811_I2C_FREQUENCY
+	int "CCS811 I2C frequency"
+	default 100000
+	range 1 400000
+
+endif # SENSORS_CCS811
+
 config SENSORS_DHTXX
 	bool "DHTxx humidity/temperature Sensor support"
 	default n
@@ -1083,8 +1100,8 @@ config SENSORS_LSM6DS3TRC
 		Enable uORB driver support for the STM LSM6DS3TR-C 6-axis IMU
 		over I2C. Needs the high-priority work queue even in kthread
 		polling mode: the driver's interrupt handlers reference it
-		unconditionally (they're only dead code until a future phase wires
-		up INT1/INT2).
+		unconditionally, whether or not a board actually wires up INT1
+		to use them.
 
 if SENSORS_LSM6DS3TRC
 
@@ -1114,6 +1131,35 @@ config SENSORS_LSM6DS3TRC_GYRO_ORB_BUFSIZE
 	range 0 500
 	---help---
 		The circular buffer size for the gyroscope uORB measurements
+
+config SENSORS_LSM6DS3TRC_FIFO
+	bool "LSM6DS3TR-C FIFO drain (interrupt mode only)"
+	default n
+	---help---
+		Drain the chip's hardware FIFO on a watermark interrupt instead of
+		pushing one uORB event per physical sample on every data-ready
+		interrupt. Cuts the number of I2C transactions and interrupt
+		wakeups by roughly the watermark size, at the cost of both
+		sub-sensors being forced to the same output data rate while this
+		is on (whichever one is activated first sets it; the other joins
+		it) and per-sample temperature (the FIFO pattern doesn't include
+		it; one direct temperature read per drain is applied to the whole
+		batch instead). Only takes effect when the board registers this
+		driver with a real interrupt attach() -- it's silently unused in
+		kthread polling mode.
+
+config SENSORS_LSM6DS3TRC_FIFO_WATERMARK
+	int "LSM6DS3TR-C FIFO watermark (samples)"
+	default 8
+	range 1 300
+	depends on SENSORS_LSM6DS3TRC_FIFO
+	---help---
+		How many samples (not raw FIFO words) accumulate before the FIFO
+		threshold interrupt fires and a drain happens. Keep this at or
+		below CONFIG_SENSORS_LSM6DS3TRC_ACCEL_ORB_BUFSIZE and
+		CONFIG_SENSORS_LSM6DS3TRC_GYRO_ORB_BUFSIZE -- one drain can push
+		up to this many events into each topic's uORB ring buffer in a
+		single burst, and a smaller ring buffer will drop the oldest ones.
 
 endif # SENSORS_LSM6DS3TRC
 
@@ -1224,6 +1270,25 @@ config SENSORS_INA226
 	select I2C
 	---help---
 		Enable driver support for the Texas Instruments INA226/INA230 power monitor.
+
+config SENSORS_INA226_UORB
+	bool "INA226 UORB Interface"
+	default n
+	depends on SENSORS_INA226 && UORB
+	---help---
+		Build the sensor framework version of this driver rather than
+		the character device one.  The part then publishes voltage,
+		current and power as uORB topics that the common sensor tools
+		can read, instead of a node returning a structure only code
+		written for this part understands.
+
+		All three come from one reading and share its timestamp, so
+		the power is the product of a voltage and a current measured
+		at the same instant rather than at three different ones.
+
+		The two versions cannot be built together and take different
+		arguments, so a board choosing this must call
+		ina226_register_uorb() rather than ina226_register().
 
 config INA226_I2C_FREQUENCY
 	int "INA226 I2C frequency"
@@ -1477,6 +1542,15 @@ config SENSORS_ADXL362_THREAD_STACKSIZE
 		The stack size for the worker thread.
 
 endif # SENSORS_ADXL362
+
+config SENSORS_ADXL367
+	bool "Analog Devices ADXL367 accelerometer"
+	default n
+	select I2C
+	---help---
+		Enable the ADXL367 I2C accelerometer driver using the sensor
+		framework. Supports +/-2 g acceleration and die temperature,
+		with output data rates from 12.5 to 400 Hz.
 
 config SENSORS_ADXL372
 	bool "Analog Devices ADXL372 Sensor support"
@@ -1922,6 +1996,50 @@ config SCD41_DEBUG
 
 endif # SENSORS_SCD41
 
+config SENSORS_SCL3300
+	bool "Murata SCL3300 3-axis inclinometer"
+	default n
+	select SPI
+	---help---
+		Enable the uORB driver for the Murata SCL3300-D01 3-axis
+		inclinometer with SPI interface. Publishes sensor_inclinometer
+		and, optionally, sensor_accel topics. The operation mode and the
+		idle power policy are set by the board (struct scl3300_config_s)
+		and can be changed at run time with ioctls.
+
+if SENSORS_SCL3300
+
+config SENSORS_SCL3300_ACCEL
+	bool "Also publish the accelerometer topic"
+	default y
+
+config SENSORS_SCL3300_SPI_FREQUENCY
+	int "SPI frequency (Hz)"
+	default 2000000
+	range 100000 8000000
+
+config SENSORS_SCL3300_POLL
+	bool "Poll the sensor from a kernel thread"
+	default y
+	---help---
+		The SCL3300 has no data-ready interrupt pin, so polling is the
+		normal mode. When disabled, data is only read on fetch().
+
+if SENSORS_SCL3300_POLL
+
+config SENSORS_SCL3300_POLL_INTERVAL
+	int "Default polling interval in microseconds"
+	default 10000
+	range 500 4294967295
+
+config SENSORS_SCL3300_THREAD_STACKSIZE
+	int "Worker thread stack size"
+	default 1024
+
+endif # SENSORS_SCL3300_POLL
+
+endif # SENSORS_SCL3300
+
 config SENSORS_SGP30
 	bool "Sensirion SGP30 Gas Platform sensor"
 	default n
@@ -2324,6 +2442,24 @@ config SENSORS_TMP112_UORB
 		are reported correctly rather than as large positive ones.
 
 endif #SENSORS_TMP112
+
+config SENSORS_TC74
+	bool "Microchip TC74 Temperature Sensor support"
+	default n
+	select I2C
+	---help---
+		Enable driver support for the Microchip TC74 digital temperature sensor.
+
+if SENSORS_TC74
+
+config TC74_I2C_FREQUENCY
+	int "TC74 I2C frequency"
+	default 100000
+	range 1 100000
+	---help---
+		I2C clock frequency for the TC74 sensor. Default is 100 kHz.
+
+endif # SENSORS_TC74
 
 config SENSORS_QMI8658
 	bool "QST QMI8658 6-Axis IMU Sensor support"

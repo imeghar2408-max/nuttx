@@ -2,7 +2,7 @@
 Amber
 =====
 
-.. tags:: chip:atmega128, arch:avr
+.. tags:: arch:avr, chip:atmega, part:atmega128, vendor:microchip
 
 This is the documentation for the `SoC Robotics Amber Web Server
 <https://soc-robotics.com/product/Amber_Specs/Amber_Processor.html>`_ that is
@@ -214,7 +214,7 @@ Buildroot
 ---------
 
 There is a DIY buildroot version for the AVR boards here:
-http://bitbucket.org/nuttx/buildroot/downloads/. See the following section for
+https://github.com/patacongo/buildroot. See the following section for
 details on building this toolchain.
 
 You may also have to modify the PATH environment variable if your make cannot

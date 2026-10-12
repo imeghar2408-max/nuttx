@@ -2,7 +2,7 @@
 Waveshare RP2040 LCD 1.28
 ===============================
 
-.. tags:: chip:rp2040
+.. tags:: arch:arm, chip:rp2040, vendor:raspberry-pi
 
 The `Waveshare RP2040 LCD 1.28 <https://www.waveshare.com/wiki/RP2040-LCD-1.28>`_
 is a low-cost, high-performance MCU board designed by Waveshare based on RP2040
@@ -87,6 +87,17 @@ composite
 NuttShell configuration (console enabled in UART0, at 115200 bps) with support for
 CDC/ACM with MSC USB composite driver. ``conn`` command enables the composite
 device.
+
+fastboot_usb
+------------
+
+Runs the USB fastboot daemon (``fastbootd``) on boot instead of NSH, exposed
+as a USB composite device together with CDC/ACM (console enabled in USB
+Port, at 115200 bps). On the host, ``fastboot devices``, ``fastboot getvar
+<var>``, and ``fastboot reboot``/``fastboot reboot bootloader`` are
+available. More details about the fastboot daemon are available at
+`fastbootd — NuttX latest documentation
+<https://nuttx.apache.org/docs/latest/applications/system/fastboot/index.html>`_.
 
 nsh
 ---

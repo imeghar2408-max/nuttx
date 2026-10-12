@@ -44,6 +44,19 @@
 #  define CONFIG_LIBC_ELF_MAXDEPEND  0
 #endif
 
+/* A compacting filesystem gives its media address with a pin that holds the
+ * blocks in place.  The loader holds the pin through a file reference,
+ * because the unload runs on another task.
+ *
+ * That reference is taken with file_get() and file_dup2(), which are kernel
+ * side, so this is for the copy of libc that runs there.
+ */
+
+#if defined(CONFIG_FS_PIN) && \
+    (defined(CONFIG_BUILD_FLAT) || defined(__KERNEL__))
+#  define HAVE_LIBC_ELF_PIN 1
+#endif
+
 #ifndef CONFIG_LIBC_ELF_ALIGN_LOG2
 #  define CONFIG_LIBC_ELF_ALIGN_LOG2 2
 #endif
@@ -79,12 +92,12 @@
  *   portion of the build
  */
 
-/* dlopen() needs a name too: it is the only way to tell that a library is
- * already loaded.
+/* A name is also the only way to tell that a library is already loaded, so
+ * dlopen() and DT_NEEDED need one.
  */
 
 #if defined(CONFIG_BUILD_FLAT) || defined(__KERNEL__) || \
-    defined(CONFIG_LIBC_DLFCN)
+    defined(CONFIG_LIBC_DLFCN) || CONFIG_LIBC_ELF_MAXDEPEND > 0
 #  define HAVE_LIBC_ELF_NAMES
 #  define LIBC_ELF_NAMEMAX NAME_MAX
 #endif
@@ -123,6 +136,7 @@ typedef CODE int (*mod_uninitializer_t)(FAR void *arg);
  *   nexports      - The number of symbols in the exported symbol table.
  */
 
+struct file;
 struct symtab_s;
 struct mod_info_s
 {
@@ -154,6 +168,8 @@ typedef CODE int (*mod_initializer_t)(FAR struct mod_info_s *modinfo);
 struct module_s;
 typedef CODE int (*mod_callback_t)(FAR struct module_s *modp, FAR void *arg);
 
+struct fdpic_desc_s;
+
 /* This describes the file to be loaded. */
 
 struct module_s
@@ -174,6 +190,19 @@ struct module_s
   uint16_t nsect;                      /* Number of entries in sectalloc array */
 #endif
   int dynamic;                         /* Module is a dynamic shared object */
+  uintptr_t gotbase;                   /* An FDPIC object's data base, to
+                                        * enter its destructors with.  Zero
+                                        * for anything else, so it also says
+                                        * which kind of object this is: an
+                                        * FDPIC one placed its two segments
+                                        * separately and its text may be
+                                        * media rather than an allocation
+                                        */
+#ifdef HAVE_LIBC_ELF_PIN
+  FAR struct file *pinfile;            /* Holds the XIP pin on the text until
+                                        * the module is unloaded
+                                        */
+#endif
 #if defined(CONFIG_FS_PROCFS) && !defined(CONFIG_FS_PROCFS_EXCLUDE_MODULE)
   size_t textsize;                     /* Size of the kernel .text memory allocation */
   size_t datasize;                     /* Size of the kernel .bss/.data memory allocation */
@@ -246,11 +275,37 @@ struct mod_loadinfo_s
   uint16_t      buflen;      /* size of iobuffer[] */
   int           filfd;       /* Descriptor for the file being loaded */
   int           nexports;    /* ET_DYN - Number of symbols exported */
-  int           gotindex;    /* Index to the GOT section */
   uintptr_t     xipbase;     /* if elf is position independent, and use
                               * romfs/tmps, we can try get xipbase,
                               * skip the copy.
                               */
+
+  /* True if e_ident[EI_OSABI] marked this an FDPIC object. */
+
+  bool          fdpic;
+
+#ifdef HAVE_LIBC_ELF_PIN
+  /* The file the pin is held through, handed to the module once it loads. */
+
+  FAR struct file *pinfile;
+#endif
+
+  /* The object's GOT.  gotbase is where it ended up: the placed address of
+   * .got, or DT_PLTGOT for an FDPIC object, which runs with it in the PIC
+   * base register.  gotsize is the extent of .got, and is also what says
+   * the object has one at all.
+   */
+
+  uintptr_t     gotbase;
+  size_t        gotsize;
+
+  /* Pool of function descriptors behind the writable segment.  Reserved
+   * when the segment is sized, and bounded by the relocation count.
+   */
+
+  FAR struct fdpic_desc_s *descpool;
+  uint16_t      ndesc;       /* Capacity */
+  uint16_t      usedesc;     /* Next free slot */
 
   /* Address environment.
    *
@@ -743,7 +798,9 @@ FAR const void *libelf_getsymbol(FAR void *handle, FAR const char *name);
  * Name: libelf_uninit
  *
  * Description:
- *   Uninitialize module resources.
+ *   Uninitialize module resources.  Gives up everything the module holds,
+ *   the DT_NEEDED libraries included, so the caller must hold the last
+ *   reference.
  *
  ****************************************************************************/
 

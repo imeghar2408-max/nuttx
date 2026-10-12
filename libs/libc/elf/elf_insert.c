@@ -28,6 +28,7 @@
 #include <errno.h>
 #include <sys/param.h>
 
+#include <nuttx/fdpic.h>
 #include <nuttx/lib/lib.h>
 #include <nuttx/lib/elf.h>
 
@@ -85,6 +86,7 @@ void libelf_dumploadinfo(FAR struct mod_loadinfo_s *loadinfo)
       for (i = 0; i < loadinfo->ehdr.e_shnum; i++)
         {
           FAR Elf_Shdr *shdr = &loadinfo->shdr[i];
+
           binfo("Sections %d:\n", i);
 #  ifdef CONFIG_ARCH_USE_SEPARATED_SECTION
           if (loadinfo->ehdr.e_type == ET_REL)
@@ -247,9 +249,21 @@ static int libelf_loadsymtab(FAR struct module_s *modp,
       if (sym[i].st_shndx != SHN_UNDEF &&
           sym[i].st_shndx < loadinfo->ehdr.e_shnum)
         {
-          FAR Elf_Shdr *s = &loadinfo->shdr[sym[i].st_shndx];
+          if (loadinfo->ehdr.e_type == ET_DYN)
+            {
+              /* A shared object's symbol value is already the full
+               * link-time address.  It only needs translating onto where
+               * the object was placed.
+               */
 
-          sym[i].st_value = sym[i].st_value + s->sh_addr;
+              sym[i].st_value = libelf_addr(loadinfo, sym[i].st_value);
+            }
+          else
+            {
+              FAR Elf_Shdr *s = &loadinfo->shdr[sym[i].st_shndx];
+
+              sym[i].st_value = sym[i].st_value + s->sh_addr;
+            }
         }
     }
 
@@ -391,6 +405,11 @@ FAR void *libelf_insert(FAR const char *filename, FAR const char *modname)
 
   modp->textalloc = (FAR void *)loadinfo.textalloc;
   modp->dataalloc = (FAR void *)loadinfo.datastart;
+  modp->gotbase   = loadinfo.fdpic ? loadinfo.gotbase : 0;
+#ifdef HAVE_LIBC_ELF_PIN
+  modp->pinfile     = loadinfo.pinfile;
+  loadinfo.pinfile  = NULL;
+#endif
 #ifdef CONFIG_ARCH_USE_SEPARATED_SECTION
   modp->sectalloc = (FAR void **)loadinfo.sectalloc;
   modp->nsect = loadinfo.ehdr.e_shnum;
@@ -401,34 +420,38 @@ FAR void *libelf_insert(FAR const char *filename, FAR const char *modname)
   modp->datasize  = loadinfo.datasize;
 #endif
 
-  /* Call the module initializer */
+  /* Call the module initializer.  An FDPIC object's constructors reach its
+   * globals through its own data base, which the loading thread does not
+   * carry; for anything else modp->gotbase is zero and they are called
+   * directly.
+   */
 
   switch (loadinfo.ehdr.e_type)
     {
       case ET_REL :
       case ET_DYN :
 
-          /* Process any preinit_array entries */
+        /* Process any preinit_array entries */
 
-          array = (FAR void (**)(void))loadinfo.preiarr;
-          for (i = 0; i < loadinfo.nprei; i++)
-            {
-              array[i]();
-            }
+        array = (FAR void (**)(void))loadinfo.preiarr;
+        for (i = 0; i < loadinfo.nprei; i++)
+          {
+            fdpic_call(0, array[i], modp->gotbase);
+          }
 
-          /* Process any init_array entries */
+        /* Process any init_array entries */
 
-          array = (FAR void (**)(void))loadinfo.initarr;
-          for (i = 0; i < loadinfo.ninit; i++)
-            {
-              array[i]();
-            }
+        array = (FAR void (**)(void))loadinfo.initarr;
+        for (i = 0; i < loadinfo.ninit; i++)
+          {
+            fdpic_call(0, array[i], modp->gotbase);
+          }
 
-          modp->initarr = loadinfo.initarr;
-          modp->ninit = loadinfo.ninit;
-          modp->finiarr = loadinfo.finiarr;
-          modp->nfini = loadinfo.nfini;
-          break;
+        modp->initarr = loadinfo.initarr;
+        modp->ninit = loadinfo.ninit;
+        modp->finiarr = loadinfo.finiarr;
+        modp->nfini = loadinfo.nfini;
+        break;
     }
 
   /* Add the new module entry to the registry */

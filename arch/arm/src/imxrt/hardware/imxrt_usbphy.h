@@ -36,11 +36,14 @@
 
 #define IMXRT_USBPHY_BASE_OFFSET            0x1000  /* USB1 PHY Base */
 
-/* Simple hack to get iMXRT117x working with same macro */
+/* Simple hack to get iMXRT117x/iMXRT118x working with same macro */
 
 #ifdef CONFIG_ARCH_FAMILY_IMXRT117x
 #  define IMXRT_ANATOP_BASE                 0x40433000 /* ANATOP doesn't exist on rt117x, it is used this way here only to make the code compatible */
 #  define IMXRT_USBPHY_SHIFT                0x4000
+#elif defined(CONFIG_ARCH_FAMILY_IMXRT118x)
+#  define IMXRT_ANATOP_BASE                 (IMXRT_USBPHY1_BASE - IMXRT_USBPHY_BASE_OFFSET) /* ANATOP doesn't exist on rt118x */
+#  define IMXRT_USBPHY_SHIFT                0x10000
 #else
 #  define IMXRT_USBPHY_SHIFT                0x1000
 #endif
@@ -116,7 +119,7 @@
 #define USBPHY_CTRL_ENHOSTDISCONDET   (1 << 1)   /* Bit 1:  Enable HighSpeed disconnect detector */
 #define USBPHY_CTRL_ENOTG_ID_CHG_IRQ  (1 << 0)   /* Bit 0:  Enable OTG_ID_CHG_IRQ */
 
-/* USB PHY PLL Control/Status Register (PLL_SIC, only in IMXRT117X) */
+/* USB PHY PLL Control/Status Register (PLL_SIC, IMXRT117x and IMXRT118x) */
 #define USBPHY_PLL_SIC_PLL_POSTDIV_SHIFT   (2)        /* Bits 2-5: PLL_POSTDIV */
 #define USBPHY_PLL_SIC_PLL_POSTDIV_MASK    (0x7 << USBPHY_PLL_SIC_PLL_POSTDIV_SHIFT)
 #define USBPHY_PLL_SIC_PLL_POSTDIV(n)      (((n) << USBPHY_PLL_SIC_PLL_POSTDIV_SHIFT) & USBPHY_PLL_SIC_PLL_POSTDIV_MASK)
@@ -127,7 +130,7 @@
 #define USBPHY_PLL_SIC_REFBIAS_PWD_SEL     (1 << 19)  /* Bit 19: REFBIAS_PWD_SEL */
 #define USBPHY_PLL_SIC_REFBIAS_PWD         (1 << 20)  /* Bit 20: Power down the reference bias */
 #define USBPHY_PLL_SIC_PLL_REG_ENABLE      (1 << 21)  /* Bit 21: PLL_REG_ENABLE */
-#define USBPHY_PLL_SIC_PLL_DIV_SEL_SHIFT   (22)       /* Bits 22-25: PLL_DIV_SEL */
+#define USBPHY_PLL_SIC_PLL_DIV_SEL_SHIFT   (22)       /* Bits 22-24: PLL_DIV_SEL */
 #define USBPHY_PLL_SIC_PLL_DIV_SEL_MASK    (0x7 << USBPHY_PLL_SIC_PLL_DIV_SEL_SHIFT)
 #define USBPHY_PLL_SIC_PLL_DIV_SEL(n)      (((n) << USBPHY_PLL_SIC_PLL_DIV_SEL_SHIFT) & USBPHY_PLL_SIC_PLL_DIV_SEL_MASK)
 #define USBPHY_PLL_SIC_PLL_LOCK            (1 << 31)  /* Bit 31: PLL_LOCK */

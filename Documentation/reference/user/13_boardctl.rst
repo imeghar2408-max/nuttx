@@ -72,7 +72,7 @@ Power Management
    Manage power state transition and query. The supplied argument
    indicates the specific PM operation to perform, which map to
    corresponding internal ``pm_<operation>`` functions
-   (see :doc:`/components/drivers/special/power/pm/index`).
+   (see :doc:`/os/drivers/special/power/pm/index`).
 
    With this interface you can interact with PM handling arch/board logic
    (typically done in IDLE loop) or you can directly manage state transitions
@@ -227,19 +227,4 @@ Graphics
    :configuration: CONFIG_NXTERM
 
    :dependencies: Base NX terminal logic provides :c:func:`nxterm_ioctl_tap`.
-
-Testing
--------
-
-.. c:macro:: BOARDIOC_TESTSET
-
-   Access architecture-specific up_testset() operation
-
-   :Argument: A pointer to a write-able spinlock object. On success
-     the  preceding spinlock state is returned: 0=unlocked,
-     1=locked.
-
-   :configuration: CONFIG_BOARDCTL_TESTSET
-
-   :dependencies: Architecture-specific logic provides :c:func:`up_testset`.
 

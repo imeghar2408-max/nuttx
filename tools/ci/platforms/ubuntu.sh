@@ -119,6 +119,7 @@ bloaty() {
 }
 
 c_cache() {
+  add_path "${NUTTXTOOLS}"/ccache/bin
   if ! type ccache > /dev/null 2>&1; then
     sudo apt-get install -y ccache
   fi
@@ -199,7 +200,7 @@ python_tools() {
     construct \
     cvt2utf \
     cxxfilt \
-    esptool==5.2.0 \
+    esptool==5.3.1 \
     imgtool \
     kconfiglib \
     pexpect==4.8.0 \

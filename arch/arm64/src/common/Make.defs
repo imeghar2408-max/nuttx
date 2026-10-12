@@ -80,6 +80,22 @@ endif
 
 ifeq ($(CONFIG_ARCH_HAVE_MMU),y)
 CMN_CSRCS += arm64_mmu.c
+
+# drivers/misc/addrenv.c defines the same entry points from a table.
+
+ifneq ($(CONFIG_DEV_SIMPLE_ADDRENV),y)
+CMN_CSRCS += arm64_physpgaddr.c
+endif
+endif
+
+ifeq ($(CONFIG_ARM64_CRYPTO_AES),y)
+CMN_CSRCS += arm64_aes.c
+endif
+
+ifeq ($(CONFIG_CRYPTO_CRYPTODEV_HARDWARE),y)
+ifeq ($(CONFIG_ARM64_CRYPTO_AES),y)
+CMN_CSRCS += arm64_crypto.c
+endif
 endif
 
 ifeq ($(CONFIG_ARM64_MTE),y)
@@ -143,5 +159,7 @@ ifeq ($(CONFIG_ARM64_SEMIHOSTING_HOSTFS),y)
 endif
 
 ifeq ($(CONFIG_ARCH_HAVE_PERF_EVENTS_USER_ACCESS),y)
-  CMN_UCSRCS += arm64_perf.c
+  ifneq ($(CONFIG_BUILD_FLAT),y)
+    CMN_UCSRCS += arm64_perf.c
+  endif
 endif

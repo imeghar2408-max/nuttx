@@ -93,10 +93,14 @@ int waittcb(FAR struct tcb_s *rtcb, pid_t pid, int options,
 
               ret = child->ch_pid;
 
-              /* Discard the child entry and break out of the loop */
+              /* Discard the child entry unless WNOWAIT is set */
 
-              group_remove_child(rtcb->group, child->ch_pid);
-              group_free_child(child);
+              if ((options & WNOWAIT) == 0)
+                {
+                  group_remove_child(rtcb->group, child->ch_pid);
+                  group_free_child(child);
+                }
+
               break;
             }
         }
@@ -373,7 +377,8 @@ pid_t nxsched_waitpid(pid_t pid, FAR int *stat_loc, int options)
        */
 
       ctcb = nxsched_get_tcb(pid);
-      if (!ctcb || !ctcb->group || ctcb->group->tg_ppid != rtcb->pid ||
+      if (!ctcb || !ctcb->group ||
+          ctcb->group->tg_ppid != rtcb->group->tg_pid ||
           (ctcb->flags & TCB_FLAG_EXIT_PROCESSING) != 0)
         {
           ret = -ECHILD;

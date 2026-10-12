@@ -289,6 +289,9 @@ tools/mkpasswd$(HOSTEXEEXT):
 tools/mknxflat$(HOSTEXEEXT):
 	$(Q) $(MAKE) -C tools -f Makefile.host mknxflat$(HOSTEXEEXT)
 
+tools/ldnxflat$(HOSTEXEEXT):
+	$(Q) $(MAKE) -C tools -f Makefile.host ldnxflat$(HOSTEXEEXT)
+
 # .dirlinks, and helpers
 #
 # Directories links.  Most of establishing the NuttX configuration involves
@@ -602,7 +605,7 @@ endif
 ifeq ($(CONFIG_RAW_DISASSEMBLY),y)
 	@echo "CP: nuttx.asm"
 	$(Q) $(OBJDUMP) -d $(BIN) > nuttx.asm
-	$(Q) echo nuttx.bin >> nuttx.asm
+	$(Q) echo nuttx.asm >> nuttx.manifest
 endif
 	$(call POSTBUILD, $(TOPDIR))
 
@@ -673,12 +676,14 @@ ifeq ($(CONFIG_BOARD_ETC_ROMFS_PASSWD_ENABLE),y)
 PASSWD_TOOL_DEP += tools/mkpasswd$(HOSTEXEEXT)
 endif
 
-# mknxflat generates the import thunks for an NXFLAT module, so it is only
-# needed by a configuration that builds them.
+# mknxflat generates the import thunks for an NXFLAT module and ldnxflat
+# converts it, so both are needed by a configuration that builds them, and by
+# no other.
 
 NXFLAT_TOOL_DEP =
 ifeq ($(CONFIG_NXFLAT),y)
 NXFLAT_TOOL_DEP += tools/mknxflat$(HOSTEXEEXT)
+NXFLAT_TOOL_DEP += tools/ldnxflat$(HOSTEXEEXT)
 endif
 
 pass1dep: context tools/mkdeps$(HOSTEXEEXT) tools/cnvwindeps$(HOSTEXEEXT) $(PASSWD_TOOL_DEP) $(NXFLAT_TOOL_DEP)

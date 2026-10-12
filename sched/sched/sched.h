@@ -48,8 +48,8 @@
  * and by a series of task lists.  All of these tasks lists are declared
  * below. Although it is not always necessary, most of these lists are
  * prioritized so that common list handling logic can be used (only the
- * g_readytorun, the g_pendingtasks, and the g_waitingforsemaphore lists
- * need to be prioritized).
+ * g_readytorun and g_pendingtasks lists, and the wait lists in each
+ * semaphore, event and message queue, need to be prioritized).
  */
 
 #define list_readytorun()        (&g_readytorun)
@@ -154,8 +154,8 @@ enum task_deliver_e
  * and by a series of task lists.  All of these tasks lists are declared
  * below. Although it is not always necessary, most of these lists are
  * prioritized so that common list handling logic can be used (only the
- * g_readytorun, the g_pendingtasks, and the g_waitingforsemaphore lists
- * need to be prioritized).
+ * g_readytorun and g_pendingtasks lists, and the wait lists in each
+ * semaphore, event and message queue, need to be prioritized).
  */
 
 /* This is the list of all tasks that are ready to run.  This is a
@@ -349,8 +349,10 @@ int  nxsched_reprioritize(FAR struct tcb_s *tcb, int sched_priority);
 
 #ifdef CONFIG_SCHED_TICKLESS
 void nxsched_reassess_timer(void);
+void nxsched_timer_start(clock_t now, clock_t delay);
 #else
 #  define nxsched_reassess_timer()
+#  define nxsched_timer_start(now, delay)
 #endif
 
 /* Scheduler policy support */
@@ -358,9 +360,16 @@ void nxsched_reassess_timer(void);
 #if CONFIG_RR_INTERVAL > 0
 clock_t nxsched_process_roundrobin(FAR struct tcb_s *tcb, clock_t ticks,
                                    bool noswitches);
+#  ifdef CONFIG_SCHED_TICKLESS
+void nxsched_suspend_roundrobin(FAR struct tcb_s *tcb);
+void nxsched_resume_roundrobin(FAR struct tcb_s *tcb);
+#  endif
 #endif
 
 #ifdef CONFIG_SCHED_SPORADIC
+int  nxsched_validate_sporadic(FAR const struct sched_param *param,
+                                FAR clock_t *repl_ticks,
+                                FAR clock_t *budget_ticks);
 int  nxsched_initialize_sporadic(FAR struct tcb_s *tcb);
 int  nxsched_start_sporadic(FAR struct tcb_s *tcb);
 int  nxsched_stop_sporadic(FAR struct tcb_s *tcb);

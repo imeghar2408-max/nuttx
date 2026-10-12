@@ -33,7 +33,6 @@
 
 #include <nuttx/debug.h>
 #include <nuttx/irq.h>
-#include <nuttx/fs/fs.h>
 #include <nuttx/kmalloc.h>
 #include <nuttx/semaphore.h>
 #include <nuttx/sched.h>
@@ -41,6 +40,10 @@
 #include "sched/sched.h"
 #include "group/group.h"
 #include "tls/tls.h"
+
+#ifdef CONFIG_FS_CHROOT
+#  include "../../fs/fs_heap.h"
+#endif
 
 /****************************************************************************
  * Private Data
@@ -98,6 +101,57 @@ static inline void group_inherit_identity(FAR struct task_group_s *group)
 #  define group_inherit_identity(group)
 #endif
 
+#ifdef CONFIG_FS_CHROOT
+/****************************************************************************
+ * Name: group_inherit_chroot
+ *
+ * Description:
+ *   Inherit the chroot jail from the parent task group.  Kernel threads
+ *   share g_kthread_group and must not inherit a user jail.
+ *   CONFIG_FS_CHROOT is selected in fs/Kconfig.
+ *
+ * Input Parameters:
+ *   group - The new task group.
+ *   ttype - The type of the new thread (TCB_FLAG_TTYPE_* value).
+ *
+ * Returned Value:
+ *   Zero (OK) on success; a negated errno value on failure.
+ *
+ ****************************************************************************/
+
+static int group_inherit_chroot(FAR struct task_group_s *group,
+                                 uint8_t ttype)
+{
+  FAR struct tcb_s *rtcb;
+  FAR struct task_group_s *rgroup;
+
+  if (ttype == TCB_FLAG_TTYPE_KERNEL)
+    {
+      return OK;
+    }
+
+  rtcb   = this_task();
+  rgroup = rtcb->group;
+
+  DEBUGASSERT(group != NULL && rgroup != NULL);
+
+  if (rgroup->tg_root == NULL)
+    {
+      return OK;
+    }
+
+  group->tg_root = fs_heap_strdup(rgroup->tg_root);
+  if (group->tg_root == NULL)
+    {
+      return -ENOMEM;
+    }
+
+  return OK;
+}
+#else
+#  define group_inherit_chroot(group, ttype) (0)
+#endif
+
 /****************************************************************************
  * Public Functions
  ****************************************************************************/
@@ -142,6 +196,7 @@ int group_allocate(FAR struct tcb_s *tcb, uint8_t ttype)
     {
       group = &g_kthread_group;
       tcb->group = group;
+      group->tg_caps = PR_CAP_ALL;
       if (group->tg_info)
         {
           return OK;
@@ -190,6 +245,15 @@ int group_allocate(FAR struct tcb_s *tcb, uint8_t ttype)
 
   group_inherit_identity(group);
 
+  ret = group_inherit_chroot(group, ttype);
+  if (ret < 0)
+    {
+      goto errout_with_group;
+    }
+
+  group->tg_caps = this_task()->group != NULL ?
+                   this_task()->group->tg_caps : PR_CAP_ALL;
+
   /* Initialize file descriptors for the TCB */
 
   fdlist_init(&group->tg_fdlist);
@@ -219,7 +283,20 @@ int group_allocate(FAR struct tcb_s *tcb, uint8_t ttype)
   return OK;
 
 errout_with_group:
-  kmm_free(group);
+#ifdef CONFIG_FS_CHROOT
+  if (group->tg_root != NULL)
+    {
+      fs_heap_free(group->tg_root);
+      group->tg_root = NULL;
+    }
+#endif
+
+  if (group != &g_kthread_group)
+    {
+      kmm_free(group);
+    }
+
+  tcb->group = NULL;
   return ret;
 }
 

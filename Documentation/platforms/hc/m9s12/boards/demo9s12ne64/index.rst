@@ -2,7 +2,7 @@
 demo9s12ne64
 ============
 
-.. tags:: vendor:freescale
+.. tags:: arch:hc, chip:m9s12, vendor:nxp
 
 This README discusses issues unique to NuttX configurations for the Freescale
 DEMO9S12NE64 development board.
@@ -24,7 +24,7 @@ modified to point to the correct path to the HC12 GCC toolchain (if different
 from the default in your PATH variable).
 
 If you have no HC12 toolchain, one can be downloaded from the NuttX
-Bitbucket download site (https://bitbucket.org/nuttx/buildroot/downloads/).
+buildroot repository (https://github.com/patacongo/buildroot).
 This GNU toolchain builds and executes in the Linux or Cygwin
 environments.
 

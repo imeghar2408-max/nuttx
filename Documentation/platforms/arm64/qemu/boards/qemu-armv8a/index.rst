@@ -2,7 +2,7 @@
 QEMU ARMv8-A
 ============
 
-.. tags:: chip:virt, arch:arm64
+.. tags:: arch:arm64, chip:qemu, part:virt
 
 This board configuration will use QEMU to emulate generic ARM64 v8-A series
 hardware platform and provides support for these devices:
@@ -77,6 +77,45 @@ Running with QEMU:
     -machine virt,virtualization=on,gic-version=3 \
     -net none -chardev stdio,id=con,mux=on -serial chardev:con \
     -mon chardev=con,mode=readline -kernel ./nuttx
+
+S2OPC
+-----
+
+The ``qemu-armv8a:s2opc`` configuration provides the S2OPC OPC UA server
+example.  Build it from the NuttX source directory::
+
+  $ ./tools/configure.sh -l qemu-armv8a:s2opc
+  $ make -j
+
+Run QEMU with user networking and forward host TCP port 4841 to NuttX::
+
+  $ qemu-system-aarch64 -cpu cortex-a53 -nographic \
+      -machine virt,virtualization=on,gic-version=3 \
+      -global virtio-mmio.force-legacy=false \
+      -chardev stdio,id=con,mux=on -serial chardev:con \
+      -mon chardev=con,mode=readline \
+      -netdev user,id=u1,hostfwd=tcp:127.0.0.1:4841-:4841 \
+      -device virtio-net-device,netdev=u1,bus=virtio-mmio-bus.0 \
+      -kernel ./nuttx
+
+The configured NuttX address and endpoint are ``10.0.2.15`` and
+``opc.tcp://10.0.2.15:4841``.  At the NSH prompt, start the server::
+
+  nsh> ping 10.0.2.2
+  nsh> s2opc &
+  s2opc [4:100]
+
+From another host terminal, read the standard server time node through the
+forwarded port::
+
+  $ uaread -u opc.tcp://127.0.0.1:4841 -n i=2258
+
+Stop the server with the task ID printed by NSH::
+
+  nsh> kill -2 4
+
+See :doc:`/applications/examples/s2opc/index` for command-line overrides and
+:doc:`/applications/netutils/s2opc/index` for toolkit configuration.
 
 ------------------------------------------------------------------
 Single Core with virtio network, block, rng, serial driver (GICv3)
@@ -423,6 +462,16 @@ Running with QEMU:
      -machine virt,virtualization=on,gic-version=3 \
      -net none -chardev stdio,id=con,mux=on -serial chardev:con \
      -mon chardev=con,mode=readline -kernel ./nuttx
+
+``-semihosting`` is necessary.  A kernel build loads its applications over
+hostfs.  Without the flag the guest traps in ``smh_call`` and stops in
+``AppBringUp``, which looks like a kernel defect and is not one.
+
+A kernel build gives each process its own address environment.  This is the
+only build mode on this board that provides POSIX ``fork()``:  the child
+receives its own copy of the memory of the parent, at the same virtual
+addresses.  ``vfork()`` is available in every build mode.
+
 
 Inter-VM share memory Device (ivshmem)
 --------------------------------------
@@ -946,4 +995,3 @@ References
 6. Arm Generic Interrupt Controller v3 and v4 Overview
 7. Arm® Generic Interrupt Controller Architecture Specification GIC architecture version 3 and version 4
 8. (DEN0022D.b) Arm Power State Coordination Interface Platform Design Document
-

@@ -34,6 +34,7 @@
 #include <nuttx/debug.h>
 
 #include <nuttx/symtab.h>
+#include <nuttx/fdpic.h>
 #include <nuttx/lib/elf.h>
 
 #include "libc.h"
@@ -77,6 +78,57 @@ extern int nglobals;
  ****************************************************************************/
 
 /****************************************************************************
+ * Name: libelf_symcallback
+ *
+ * Description:
+ *   libelf_registry_foreach() callback function.  Test if the provided
+ *   module, modp, exports the symbol of interest.  If so, return that symbol
+ *   value and setup the module dependency relationship.
+ *
+ * Returned Value:
+ *   0 (OK) is returned on success and a negated errno is returned on
+ *   failure.
+ *
+ ****************************************************************************/
+
+static int libelf_symcallback(FAR struct module_s *modp, FAR void *arg)
+{
+  FAR struct mod_exportinfo_s *exportinfo = (FAR struct mod_exportinfo_s *)
+                                            arg;
+
+  /* Check if this module exports a symbol of that name */
+
+  exportinfo->symbol = symtab_findbyname(modp->modinfo.exports,
+                                         exportinfo->name,
+                                         modp->modinfo.nexports);
+
+  if (exportinfo->symbol != NULL)
+    {
+      /* Yes.. save the dependency relationship and return SYM_FOUND to
+       * stop the traversal.
+       */
+
+#if CONFIG_LIBC_ELF_MAXDEPEND > 0
+      int ret = libelf_depend(exportinfo->modp, modp);
+
+      if (ret < 0)
+        {
+          berr("ERROR: libelf_depend failed: %d\n", ret);
+          return ret;
+        }
+#endif
+
+      return SYM_FOUND;
+    }
+
+  return SYM_NOT_FOUND;
+}
+
+/****************************************************************************
+ * Public Functions
+ ****************************************************************************/
+
+/****************************************************************************
  * Name: libelf_symname
  *
  * Description:
@@ -92,8 +144,8 @@ extern int nglobals;
  *
  ****************************************************************************/
 
-static int libelf_symname(FAR struct mod_loadinfo_s *loadinfo,
-                          FAR const Elf_Sym *sym, Elf_Off sh_offset)
+int libelf_symname(FAR struct mod_loadinfo_s *loadinfo,
+                   FAR const Elf_Sym *sym, Elf_Off sh_offset)
 {
   FAR uint8_t *buffer;
   off_t  offset;
@@ -107,7 +159,11 @@ static int libelf_symname(FAR struct mod_loadinfo_s *loadinfo,
 
   if (sym->st_name == 0)
     {
-      berr("ERROR: Symbol has no name\n");
+      /* Not a failure.  A section symbol has no name, and
+       * libelf_findsymbol() meets these routinely and checks for -ESRCH.
+       */
+
+      binfo("Symbol has no name\n");
       return -ESRCH;
     }
 
@@ -183,56 +239,6 @@ static int libelf_symname(FAR struct mod_loadinfo_s *loadinfo,
 }
 
 /****************************************************************************
- * Name: libelf_symcallback
- *
- * Description:
- *   libelf_registry_foreach() callback function.  Test if the provided
- *   module, modp, exports the symbol of interest.  If so, return that symbol
- *   value and setup the module dependency relationship.
- *
- * Returned Value:
- *   0 (OK) is returned on success and a negated errno is returned on
- *   failure.
- *
- ****************************************************************************/
-
-static int libelf_symcallback(FAR struct module_s *modp, FAR void *arg)
-{
-  FAR struct mod_exportinfo_s *exportinfo = (FAR struct mod_exportinfo_s *)
-                                            arg;
-
-  /* Check if this module exports a symbol of that name */
-
-  exportinfo->symbol = symtab_findbyname(modp->modinfo.exports,
-                                         exportinfo->name,
-                                         modp->modinfo.nexports);
-
-  if (exportinfo->symbol != NULL)
-    {
-      /* Yes.. save the dependency relationship and return SYM_FOUND to
-       * stop the traversal.
-       */
-
-#if CONFIG_LIBC_ELF_MAXDEPEND > 0
-      int ret = libelf_depend(exportinfo->modp, modp);
-      if (ret < 0)
-        {
-          berr("ERROR: libelf_depend failed: %d\n", ret);
-          return ret;
-        }
-#endif
-
-      return SYM_FOUND;
-    }
-
-  return SYM_NOT_FOUND;
-}
-
-/****************************************************************************
- * Public Functions
- ****************************************************************************/
-
-/****************************************************************************
  * Name: libelf_findsymtab
  *
  * Description:
@@ -248,7 +254,10 @@ int libelf_findsymtab(FAR struct mod_loadinfo_s *loadinfo)
 {
   int i;
 
-  /* Find the symbol table section header and its associated string table */
+  /* Find the symbol table section header and its associated string table.
+   * A stripped shared object keeps only its dynamic symbol table, which
+   * holds every symbol that it imports or exports.
+   */
 
   for (i = 1; i < loadinfo->ehdr.e_shnum; i++)
     {
@@ -257,6 +266,13 @@ int libelf_findsymtab(FAR struct mod_loadinfo_s *loadinfo)
           loadinfo->symtabidx = i;
           loadinfo->strtabidx = loadinfo->shdr[i].sh_link;
           break;
+        }
+
+      if (loadinfo->shdr[i].sh_type == SHT_DYNSYM &&
+          loadinfo->ehdr.e_type == ET_DYN)
+        {
+          loadinfo->symtabidx = i;
+          loadinfo->strtabidx = loadinfo->shdr[i].sh_link;
         }
     }
 
@@ -349,108 +365,118 @@ int libelf_symvalue(FAR struct module_s *modp,
 
   switch (sym->st_shndx)
     {
-    case SHN_COMMON:
-      {
-        /* NuttX ELF modules should be compiled with -fno-common. */
+      case SHN_COMMON:
+        {
+          /* NuttX ELF modules should be compiled with -fno-common. */
 
-        berr("ERROR: SHN_COMMON: Re-compile with -fno-common\n");
-        return -ENOSYS;
-      }
+          berr("ERROR: SHN_COMMON: Re-compile with -fno-common\n");
+          return -ENOSYS;
+        }
 
-    case SHN_ABS:
-      {
-        /* st_value already holds the correct value */
+      case SHN_ABS:
+        {
+          /* st_value already holds the correct value */
 
-        binfo("SHN_ABS: st_value=%08lx\n", (long)sym->st_value);
-        return OK;
-      }
+          binfo("SHN_ABS: st_value=%08lx\n", (long)sym->st_value);
+          return OK;
+        }
 
-    case SHN_UNDEF:
-      {
-        /* Get the name of the undefined symbol */
+      case SHN_UNDEF:
+        {
+          /* Get the name of the undefined symbol */
 
-        ret = libelf_symname(loadinfo, sym, sh_offset);
-        if (ret < 0)
-          {
-            /* There are a few relocations for a few architectures that do
-             * no depend upon a named symbol.  We don't know if that is the
-             * case here, but return and special error to the caller to
-             * indicate the nameless symbol.
-             */
+          ret = libelf_symname(loadinfo, sym, sh_offset);
+          if (ret < 0)
+            {
+              /* There are a few relocations for a few architectures that do
+               * no depend upon a named symbol.  We don't know if that is the
+               * case here, but return and special error to the caller to
+               * indicate the nameless symbol.
+               */
 
-            berr("ERROR: SHN_UNDEF: Failed to get symbol name: %d\n", ret);
-            return ret;
-          }
+              berr("ERROR: SHN_UNDEF: Failed to get symbol name: %d\n", ret);
+              return ret;
+            }
 
-        /* First check if the symbol is exported by an installed module.
-         * Newest modules are installed at the head of the list.  Therefore,
-         * if the symbol is exported by numerous modules, then the most
-         * recently installed will take precedence.
-         */
+          /* First check if the symbol is exported by an installed module.
+           * Newest modules are installed at the head of the list.  So if
+           * the symbol is exported by numerous modules, then the most
+           * recently installed will take precedence.
+           */
 
-        exportinfo.name   = (FAR const char *)loadinfo->iobuffer;
-        exportinfo.modp   = modp;
-        exportinfo.symbol = NULL;
+          exportinfo.name   = (FAR const char *)loadinfo->iobuffer;
+          exportinfo.modp   = modp;
+          exportinfo.symbol = NULL;
 
-        ret = libelf_registry_foreach(libelf_symcallback,
-                                      (FAR void *)&exportinfo);
-        if (ret < 0)
-          {
-            berr("ERROR: libelf_symcallback failed: %d\n", ret);
-            return ret;
-          }
+          ret = libelf_registry_foreach(libelf_symcallback,
+                                        (FAR void *)&exportinfo);
+          if (ret < 0)
+            {
+              berr("ERROR: libelf_symcallback failed: %d\n", ret);
+              return ret;
+            }
 
-        symbol = exportinfo.symbol;
+          symbol = exportinfo.symbol;
 
-        /* If the symbol is not exported by any module, then check if the
-         * base code exports a symbol of this name.
-         */
+          /* If the symbol is not exported by any module, then check if the
+           * base code exports a symbol of this name.
+           */
 
-        if (symbol == NULL)
-          {
-            symbol = symtab_findbyname(exports, exportinfo.name,
-                                       nexports);
-          }
+          if (symbol == NULL)
+            {
+              symbol = symtab_findbyname(exports, exportinfo.name,
+                                         nexports);
+            }
 
-        /* Was the symbol found from any exporter? */
+          /* Was the symbol found from any exporter?  A weak reference may
+           * stay undefined; its value is then 0, as in a static link.
+           */
 
-        if (symbol == NULL)
-          {
-            berr("ERROR: SHN_UNDEF: Exported symbol \"%s\" not found\n",
-                 loadinfo->iobuffer);
-            return -ENOENT;
-          }
+          if (symbol == NULL)
+            {
+              if (ELF_ST_BIND(sym->st_info) == STB_WEAK)
+                {
+                  binfo("SHN_UNDEF: weak \"%s\" stays 0\n",
+                        loadinfo->iobuffer);
+                  sym->st_value = 0;
+                  break;
+                }
 
-        /* Yes... add the exported symbol value to the ELF symbol tablei
-         * entry
-         */
+              berr("ERROR: SHN_UNDEF: Exported symbol \"%s\" not found\n",
+                   loadinfo->iobuffer);
+              return -ENOENT;
+            }
 
-        binfo("SHN_UNDEF: name=%s "
-              "%08" PRIxPTR "+%08" PRIxPTR "=%08" PRIxPTR "\n",
-              loadinfo->iobuffer,
-              (uintptr_t)sym->st_value, (uintptr_t)symbol->sym_value,
-              (uintptr_t)(sym->st_value + (uintptr_t)symbol->sym_value));
+          /* Yes... add the exported symbol value to the ELF symbol tablei
+           * entry
+           */
 
-        sym->st_value += ((uintptr_t)symbol->sym_value);
-      }
-      break;
+          binfo("SHN_UNDEF: name=%s "
+                "%08" PRIxPTR "+%08" PRIxPTR "=%08" PRIxPTR "\n",
+                loadinfo->iobuffer,
+                (uintptr_t)sym->st_value, (uintptr_t)symbol->sym_value,
+                (uintptr_t)(sym->st_value + (uintptr_t)symbol->sym_value));
 
-    default:
-      {
-        secbase = loadinfo->shdr[sym->st_shndx].sh_addr;
+          sym->st_value += ((uintptr_t)symbol->sym_value);
+        }
+        break;
 
-        binfo("Other[%d]: %08" PRIxPTR "+%08" PRIxPTR "=%08" PRIxPTR "\n",
-              sym->st_shndx,
-              (uintptr_t)sym->st_value, secbase,
-              (uintptr_t)(sym->st_value + secbase));
+      default:
+        {
+          secbase = loadinfo->shdr[sym->st_shndx].sh_addr;
 
-        sym->st_value += secbase;
-        if (loadinfo->gotindex >= 0)
-          {
-            sym->st_value -= loadinfo->shdr[sym->st_shndx].sh_offset;
-          }
-      }
-      break;
+          binfo("Other[%d]: %08" PRIxPTR "+%08" PRIxPTR "=%08" PRIxPTR "\n",
+                sym->st_shndx,
+                (uintptr_t)sym->st_value, secbase,
+                (uintptr_t)(sym->st_value + secbase));
+
+          sym->st_value += secbase;
+          if (loadinfo->gotsize != 0)
+            {
+              sym->st_value -= loadinfo->shdr[sym->st_shndx].sh_offset;
+            }
+        }
+        break;
     }
 
   return OK;
@@ -538,6 +564,25 @@ int libelf_insertsymtab(FAR struct module_s *modp,
                       strdup((FAR char *)loadinfo->iobuffer);
                   symbol[j].sym_value =
                       (FAR const void *)(uintptr_t)sym[i].st_value;
+
+                  /* Publish an FDPIC function as a descriptor, so dlsym()
+                   * hands back something callable.  Only here does st_info
+                   * still say what is a function.
+                   */
+
+                  if (loadinfo->fdpic &&
+                      ELF_ST_TYPE(sym[i].st_info) == STT_FUNC &&
+                      loadinfo->usedesc < loadinfo->ndesc)
+                    {
+                      FAR struct fdpic_desc_s *desc =
+                        loadinfo->descpool + loadinfo->usedesc++;
+
+                      desc->entry = sym[i].st_value;
+                      desc->got   = loadinfo->gotbase;
+
+                      symbol[j].sym_value = (FAR const void *)desc;
+                    }
+
                   j++;
                 }
             }
@@ -572,6 +617,7 @@ static int findep(FAR const void *c1, FAR const void *c2)
 {
   FAR const struct eptable_s *m1 = (FAR const struct eptable_s *)c1;
   FAR const struct eptable_s *m2 = (FAR const struct eptable_s *)c2;
+
   return strcmp((FAR const char *)m1->epname, (FAR const char *)m2->epname);
 }
 

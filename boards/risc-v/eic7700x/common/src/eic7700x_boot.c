@@ -37,6 +37,13 @@
 #include <sys/boardctl.h>
 #include <arch/board/board_memorymap.h>
 
+#include "eic7700x_clk.h"
+#ifdef CONFIG_EIC7700X_CPUCLK
+#  include "eic7700x_cpuclk.h"
+#endif
+#include "eic7700x_pinctrl.h"
+#include "eic7700x_reset.h"
+
 #include "board_config.h"
 
 /****************************************************************************
@@ -52,6 +59,25 @@
 /****************************************************************************
  * Private Functions
  ****************************************************************************/
+
+#ifdef CONFIG_EIC7700X_PINCTRL
+/****************************************************************************
+ * Name: report_pads
+ *
+ * Description:
+ *   Report the pad census.  Its own function so that nothing it needs
+ *   stays on the stack for the bring up that follows.
+ *
+ ****************************************************************************/
+
+static void report_pads(void)
+{
+  unsigned int nchanged;
+  unsigned int npads = eic7700x_pinctrl_count(&nchanged);
+
+  syslog(LOG_INFO, "pinctrl: %u pads, %u configured\n", npads, nchanged);
+}
+#endif /* CONFIG_EIC7700X_PINCTRL */
 
 /****************************************************************************
  * Name: mount_ramdisk
@@ -95,6 +121,42 @@ static int mount_ramdisk(void)
  ****************************************************************************/
 
 /****************************************************************************
+ * Name: report_clocks
+ *
+ * Description:
+ *   Report the clock tree the architecture registered before this board
+ *   ran.  Its own function so that nothing it needs stays on the stack for
+ *   the bring up that follows.
+ *
+ ****************************************************************************/
+
+static void report_clocks(void)
+{
+  unsigned int nfail;
+  unsigned int nclk = eic7700x_clk_count(&nfail);
+
+  syslog(LOG_INFO, "clk: registered %u clocks, %u failed\n", nclk, nfail);
+}
+
+/****************************************************************************
+ * Name: report_resets
+ *
+ * Description:
+ *   Report the reset lines the architecture registered before this board
+ *   ran, and how many the boot loader left held.  Its own function for the
+ *   same reason as report_clocks().
+ *
+ ****************************************************************************/
+
+static void report_resets(void)
+{
+  unsigned int held;
+  unsigned int nline = eic7700x_reset_count(&held);
+
+  syslog(LOG_INFO, "reset: %u lines, %u held\n", nline, held);
+}
+
+/****************************************************************************
  * Name: board_late_initialize
  *
  * Description:
@@ -116,11 +178,27 @@ static int mount_ramdisk(void)
 #ifdef CONFIG_BOARD_LATE_INITIALIZE
 void board_late_initialize(void)
 {
+#ifdef CONFIG_EIC7700X_CPUCLK
+  /* First, and worth a moment's spin: measure the cores against the
+   * crystal, say so, and move them to the configured speed if they are
+   * somewhere else.  The measurement is the referee in a place where the
+   * manual and the vendor's code disagree by a factor of two.
+   */
+
+  eic7700x_cpuclk_initialize();
+#endif
+
   /* Mount the RAM Disk */
 
   mount_ramdisk();
 
   mount(NULL, "/proc", "procfs", 0, NULL);
+
+  report_clocks();
+  report_resets();
+#ifdef CONFIG_EIC7700X_PINCTRL
+  report_pads();
+#endif /* CONFIG_EIC7700X_PINCTRL */
 
   /* Devices whose presence or order is this board's business */
 

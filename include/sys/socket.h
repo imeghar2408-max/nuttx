@@ -223,6 +223,31 @@
 #define SO_TIMESTAMPNS  20 /* Generates a timestamp in ns for each incoming packet
                             * arg: integer value
                             */
+#define SO_TIMESTAMPING 21 /* Generates timestamp for each output packet
+                            */
+
+/* Protocol-level socket options may begin with this value */
+
+#define __SO_PROTOCOL   16
+
+/* SO_TIMESTAMPING flags, with the same values as Linux so that they can
+ * also describe the capabilities of an interface (ETHTOOL_GET_TS_INFO).
+ * setsockopt(SO_TIMESTAMPING) currently treats any non-zero value as
+ * "enabled" and does not honour the individual flags.
+ */
+
+/* Timestamp generation */
+
+#define SOF_TIMESTAMPING_TX_HARDWARE  (1 << 0)
+#define SOF_TIMESTAMPING_TX_SOFTWARE  (1 << 1)
+#define SOF_TIMESTAMPING_RX_HARDWARE  (1 << 2)
+#define SOF_TIMESTAMPING_RX_SOFTWARE  (1 << 3)
+
+/* Timestamp reporting */
+
+#define SOF_TIMESTAMPING_SOFTWARE     (1 << 4)
+#define SOF_TIMESTAMPING_SYS_HARDWARE (1 << 5)
+#define SOF_TIMESTAMPING_RAW_HARDWARE (1 << 6)
 
 /* The options are unsupported but included for compatibility
  * and portability
@@ -248,10 +273,6 @@
 #define SOL_RFCOMM      18 /* See options in include/netpacket/bluetooth.h */
 
 #define SOL_PACKET      19
-
-/* Protocol-level socket options may begin with this value */
-
-#define __SO_PROTOCOL  16
 
 /* Values for the 'how' argument of shutdown() */
 
@@ -297,10 +318,12 @@
 
 /* "Socket"-level control message types: */
 
-#define SCM_RIGHTS      0x01    /* rw: access rights (array of int) */
-#define SCM_CREDENTIALS 0x02    /* rw: struct ucred */
-#define SCM_SECURITY    0x03    /* rw: security label */
-#define SCM_TIMESTAMP   SO_TIMESTAMP
+#define SCM_RIGHTS       0x01    /* rw: access rights (array of int) */
+#define SCM_CREDENTIALS  0x02    /* rw: struct ucred */
+#define SCM_SECURITY     0x03    /* rw: security label */
+#define SCM_TIMESTAMP    SO_TIMESTAMP
+#define SCM_TIMESTAMPNS  SO_TIMESTAMPNS
+#define SCM_TIMESTAMPING SO_TIMESTAMPING
 
 /* Desired design of maximum size and alignment (see RFC2553) */
 

@@ -2,7 +2,7 @@
 ne64badge
 =========
 
-.. tags:: vendor:freescale
+.. tags:: arch:hc, chip:m9s12, vendor:nxp
 
 This README discusses issues unique to NuttX configurations for the Future
 Electronics Group NE64 /PoE Badge board based on the MC9S12NE64 hcs12 cpu.
@@ -115,7 +115,7 @@ modified to point to the correct path to the HC12 GCC toolchain (if different
 from the default in your PATH variable).
 
 If you have no HC12 toolchain, one can be downloaded from the NuttX
-Bitbucket download site (https://bitbucket.org/nuttx/buildroot/downloads/).
+buildroot repository (https://github.com/patacongo/buildroot).
 This GNU toolchain builds and executes in the Linux or Cygwin
 environments.
 

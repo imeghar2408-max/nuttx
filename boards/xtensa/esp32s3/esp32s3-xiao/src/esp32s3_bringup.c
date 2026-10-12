@@ -38,6 +38,7 @@
 #include <errno.h>
 #include <nuttx/fs/fs.h>
 #include <nuttx/himem/himem.h>
+#include <nuttx/power/pm.h>
 #include <arch/board/board.h>
 
 #include "espressif/esp_gpio.h"
@@ -47,8 +48,16 @@
 #  include "espressif/esp_hr_timer.h"
 #endif
 
+#ifdef CONFIG_ESPRESSIF_WIFI
+#  include "esp32s3_board_wlan.h"
+#endif
+
 #ifdef CONFIG_ESP32S3_I2C
 #  include "esp32s3_i2c.h"
+#endif
+
+#if defined(CONFIG_ESP32S3_SDMMC) || defined(CONFIG_MMCSD_SPI)
+#  include "esp32s3_board_sdmmc.h"
 #endif
 
 #include "esp32s3-xiao.h"
@@ -105,6 +114,24 @@ int esp32s3_bringup(void)
     }
 #endif
 
+#ifdef CONFIG_ESP32S3_SPIFLASH
+#  ifdef CONFIG_PM
+  /* Flash ops run with the cache disabled; same PM guard as Wi-Fi below. */
+
+  pm_stay(PM_IDLE_DOMAIN, PM_IDLE);
+#  endif
+
+  ret = board_spiflash_init();
+  if (ret < 0)
+    {
+      syslog(LOG_ERR, "ERROR: Failed to initialize SPI flash: %d\n", ret);
+    }
+
+#  ifdef CONFIG_PM
+  pm_relax(PM_IDLE_DOMAIN, PM_IDLE);
+#  endif
+#endif
+
 #ifdef CONFIG_DEV_GPIO
   ret = esp32s3_gpio_init();
   if (ret < 0)
@@ -120,6 +147,14 @@ int esp32s3_bringup(void)
   if (ret < 0)
     {
       syslog(LOG_ERR, "ERROR: userled_lower_initialize() failed: %d\n", ret);
+    }
+#endif
+
+#ifdef CONFIG_MMCSD_SPI
+  ret = board_sdmmc_spi_initialize();
+  if (ret < 0)
+    {
+      syslog(LOG_ERR, "ERROR: Failed to initialize SDMMC: %d\n", ret);
     }
 #endif
 
@@ -142,6 +177,37 @@ int esp32s3_bringup(void)
       syslog(LOG_ERR,
              "Failed to initialize LSM6DS3TR-C driver for I2C0: %d\n",
              ret);
+    }
+#endif
+
+#ifdef CONFIG_ESPRESSIF_WIFI
+#  ifdef CONFIG_PM
+  /* Wi-Fi radio calibration can't tolerate PM_STANDBY light sleep. */
+
+  pm_stay(PM_IDLE_DOMAIN, PM_IDLE);
+#  endif
+
+  ret = board_wlan_init();
+  if (ret < 0)
+    {
+      syslog(LOG_ERR, "ERROR: Failed to initialize wlan subsystem=%d\n",
+             ret);
+    }
+
+#  ifdef CONFIG_PM
+  pm_relax(PM_IDLE_DOMAIN, PM_IDLE);
+#  endif
+#endif
+
+#ifdef CONFIG_ESP32S3_OPENETH
+  /* The NIC QEMU's esp32s3 machine provides; compiles away on real
+   * hardware, where CONFIG_ESP32S3_OPENETH is never set.
+   */
+
+  ret = esp_openeth_initialize();
+  if (ret < 0)
+    {
+      syslog(LOG_ERR, "ERROR: Failed to initialize openeth: %d\n", ret);
     }
 #endif
 

@@ -2,11 +2,9 @@
 ST Nucleo C071RB
 ================
 
-.. tags:: chip:stm32, chip:stm32c0, chip:stm32c071
+.. tags:: arch:arm, chip:stm32c0, part:stm32c071, vendor:st
 
 The Nucleo C071RB is a member of the Nucleo-64 board family.
-
-USB not supported yet.
 
 Buttons
 =======
@@ -28,6 +26,14 @@ nsh
 Configures the NuttShell (nsh) located at apps/examples/nsh.  The
 Configuration enables the serial interfaces on USART2.  Support for
 builtin applications is disabled.
+
+usb-cdc
+-------
+
+Configures the NuttShell on USART2 and registers a CDC/ACM serial device
+on CN13 during board bring-up.  The device enumerates when connected to
+the host.  Run ``serdis`` to disconnect it and ``sercon`` to connect it
+again.
 
 jumbo
 -----

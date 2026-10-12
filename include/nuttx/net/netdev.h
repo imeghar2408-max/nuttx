@@ -84,6 +84,8 @@
 
 #define NETDEV_TX_CSUM  (1 << 1) /* Netdev support hardware tx checksum */
 #define NETDEV_RX_CSUM  (1 << 2) /* Netdev support hardware rx checksum */
+#define NETDEV_RX_STAMP (1 << 3) /* Netdev support hardware timestamp */
+#define NETDEV_TX_STAMP (1 << 4) /* Netdev provides hardware TX timestamps */
 
 /* Determine the largest possible address */
 
@@ -527,9 +529,10 @@ struct net_driver_s
   /* Reception timestamp of packet being currently processed.
    * If CONFIG_ARCH_HAVE_NETDEV_TIMESTAMP is true, the timestamp is provided
    * by hardware driver. Otherwise it is filled in by kernel when packet
-   * enters ipv4_input or ipv6_input.
+   * enters ipv4_input or ipv6_input. The timestamp is in CLOCK_REALTIME.
    *
-   * The timestamp is in CLOCK_REALTIME.
+   * d_rxtime is serviced for older netdev driver.
+   * d_rxtime will be replaced by iob->io_tstamp in net stack.
    */
 
   struct timespec d_rxtime;

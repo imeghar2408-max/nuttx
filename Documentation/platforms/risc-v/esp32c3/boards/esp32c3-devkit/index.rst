@@ -2,6 +2,8 @@
 ESP32-C3 DevKit
 ================
 
+.. tags:: arch:risc-v, chip:esp32c3, vendor:espressif
+
 The ESP32-C3 DevKit is an entry-level development board equipped with either
 an ESP32-C3-WROOM-02 or an ESP32-C3-MINI-1.
 ESP32-C3-WROOM-02 and ESP32-C3-MINI-1 are SoMs based on the RISC-V ESP32-C3 CPU.
@@ -9,6 +11,11 @@ ESP32-C3-WROOM-02 and ESP32-C3-MINI-1 are SoMs based on the RISC-V ESP32-C3 CPU.
 Most of the I/O pins are broken out to the pin headers on both sides for easy
 interfacing. Developers can either connect peripherals with jumper wires or
 mount ESP32-C3 DevKit on a breadboard.
+
+.. note::
+   This page documents Espressif's ESP32-C3-DevKitC-02 and ESP32-C3-DevKitM-1.
+   For the compact third-party ESP32-C3 SuperMini, see
+   :doc:`../esp32c3-supermini/index`.
 
 .. list-table::
    :align: center

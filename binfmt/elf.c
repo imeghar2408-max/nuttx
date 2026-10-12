@@ -139,7 +139,7 @@ static int elf_loadbinary(FAR struct binary_s *binp,
 
   /* Bind the program to the exported symbol table */
 
-  if (loadinfo.ehdr.e_type == ET_REL || loadinfo.gotindex >= 0)
+  if (loadinfo.ehdr.e_type == ET_REL || loadinfo.gotsize != 0)
     {
       ret = libelf_bind(&binp->mod, &loadinfo, exports, nexports);
       if (ret != 0)
@@ -252,6 +252,7 @@ static int elf_loadbinary(FAR struct binary_s *binp,
 
   binp->mod.textalloc = (FAR void *)loadinfo.textalloc;
   binp->mod.dataalloc = (FAR void *)loadinfo.datastart;
+  binp->mod.gotbase   = loadinfo.fdpic ? loadinfo.gotbase : 0;
 #  ifdef CONFIG_BINFMT_CONSTRUCTORS
   binp->mod.initarr = loadinfo.initarr;
   binp->mod.finiarr = loadinfo.finiarr;
@@ -270,7 +271,7 @@ static int elf_loadbinary(FAR struct binary_s *binp,
 
   libelf_dumpentrypt(&loadinfo);
 #ifdef CONFIG_PIC
-  if (loadinfo.gotindex >= 0)
+  if (loadinfo.gotsize != 0)
     {
       FAR struct dspace_s *dspaces = kmm_zalloc(sizeof(struct dspace_s));
 
@@ -280,10 +281,19 @@ static int elf_loadbinary(FAR struct binary_s *binp,
           goto errout_with_load;
         }
 
-      dspaces->region = (FAR void *)loadinfo.shdr[loadinfo.gotindex].sh_addr;
+      dspaces->region = (FAR void *)loadinfo.gotbase;
       dspaces->crefs = 1;
       binp->picbase = (FAR void *)dspaces;
     }
+#endif
+
+#ifdef HAVE_LIBC_ELF_PIN
+  /* Past the last thing that can fail, so the module owns the pin: it is
+   * given back when the task that runs the module exits.
+   */
+
+  binp->mod.pinfile = loadinfo.pinfile;
+  loadinfo.pinfile  = NULL;
 #endif
 
   libelf_uninitialize(&loadinfo);

@@ -425,6 +425,9 @@ config STM32_HAVE_GPIOF
 config STM32_HAVE_GPIOG
 	bool
 
+config STM32_HAVE_GPIOI
+	bool
+
 # HRTIM capabilities
 
 config STM32_HAVE_HRTIM1
@@ -625,6 +628,9 @@ config STM32_HAVE_IP_PWR_G0
 	bool
 
 config STM32_HAVE_IP_PWR_M3M4_V1
+	bool
+
+config STM32_HAVE_IP_PWR_M33_V1
 	bool
 
 config STM32_HAVE_SMPS
@@ -1069,9 +1075,12 @@ config STM32_HAVE_USART_H5
 config STM32_HAVE_USART_RXFIFO_THRESHOLD
 	bool
 
+config STM32_HAVE_USART_WUS
+	bool
+
 config STM32_HAVE_USART_UNCONFIG_ON_CLOSE
 	bool
-	default y if ARCH_CHIP_STM32H5
+	default y if STM32_HAVE_IP_USART_M33_V3
 	default y if ARCH_CHIP_STM32N6
 
 config STM32_HAVE_USART2
@@ -1176,6 +1185,9 @@ config STM32_HAVE_USBDEV
 	bool
 
 config STM32_HAVE_IP_USBDEV_M0_V1
+	bool
+
+config STM32_HAVE_IP_USBDEV_M0_V2
 	bool
 
 config STM32_HAVE_IP_USBDEV_M3M4_V1

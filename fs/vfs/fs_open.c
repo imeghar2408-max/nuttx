@@ -100,15 +100,19 @@ static int file_vopen(FAR struct file *filep, FAR const char *path,
 
   /* Get an inode for this file */
 
-  SETUP_SEARCH(&desc, path, (oflags & O_NOFOLLOW) != 0);
+  ret = inode_search_setup(&desc, path, (oflags & O_NOFOLLOW) != 0);
+  if (ret < 0)
+    {
+      return ret;
+    }
 
-  ret = inode_find(&desc);
+  ret = inode_find(&desc, &inode);
   if (ret < 0)
     {
 #ifdef CONFIG_PSEUDOFS_FILE
       if ((oflags & O_CREAT) != 0)
         {
-          ret = pseudofile_create(&desc.node, path, mode);
+          ret = pseudofile_create(&inode, path, mode);
         }
 #endif
 
@@ -125,7 +129,6 @@ static int file_vopen(FAR struct file *filep, FAR const char *path,
 
   /* Get the search results */
 
-  inode = desc.node;
   DEBUGASSERT(inode != NULL);
 
 #ifdef CONFIG_FS_LINKS
@@ -145,6 +148,13 @@ static int file_vopen(FAR struct file *filep, FAR const char *path,
     }
 #endif
 
+  if ((INODE_IS_BLOCK(inode) || INODE_IS_MTD(inode)) &&
+      !nxsched_capable(PR_CAP_RAWIO))
+    {
+      ret = -EPERM;
+      goto errout_with_inode;
+    }
+
 #if defined(CONFIG_BCH) && \
     !defined(CONFIG_DISABLE_MOUNTPOINT) && \
     !defined(CONFIG_DISABLE_PSEUDOFS_OPERATIONS)
@@ -161,7 +171,7 @@ static int file_vopen(FAR struct file *filep, FAR const char *path,
       /* Release the inode reference */
 
       inode_release(inode);
-      RELEASE_SEARCH(&desc);
+      inode_search_release(&desc);
 
       /* Get the file structure of the opened character driver proxy */
 
@@ -264,7 +274,7 @@ static int file_vopen(FAR struct file *filep, FAR const char *path,
       goto errout_with_inode;
     }
 
-  RELEASE_SEARCH(&desc);
+  inode_search_release(&desc);
 #ifdef CONFIG_FS_NOTIFY
   notify_open(path, filep->f_oflags);
 #endif
@@ -275,7 +285,7 @@ errout_with_inode:
   inode_release(inode);
 
 errout_with_search:
-  RELEASE_SEARCH(&desc);
+  inode_search_release(&desc);
   return ret;
 }
 

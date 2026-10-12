@@ -32,6 +32,7 @@
 #include <assert.h>
 
 #include <nuttx/fs/fs.h>
+#include <nuttx/sched.h>
 
 #include "inode/inode.h"
 #include "vfs/vfs.h"
@@ -62,6 +63,11 @@ int nx_umount2(FAR const char *target, unsigned int flags)
   struct inode_search_s desc;
   int ret;
 
+  if (!nxsched_capable(PR_CAP_RAWIO))
+    {
+      return -EPERM;
+    }
+
   /* Verify required pointer arguments */
 
   if (!target)
@@ -72,9 +78,13 @@ int nx_umount2(FAR const char *target, unsigned int flags)
 
   /* Find the mountpt */
 
-  SETUP_SEARCH(&desc, target, false);
+  ret = inode_search_setup(&desc, target, false);
+  if (ret < 0)
+    {
+      return ret;
+    }
 
-  ret = inode_find(&desc);
+  ret = inode_find(&desc, &mountpt_inode);
   if (ret < 0)
     {
       goto errout_with_search;
@@ -82,7 +92,6 @@ int nx_umount2(FAR const char *target, unsigned int flags)
 
   /* Get the search results */
 
-  mountpt_inode = desc.node;
   DEBUGASSERT(mountpt_inode != NULL);
 
   /* Verify that the inode is a mountpoint */
@@ -189,7 +198,7 @@ int nx_umount2(FAR const char *target, unsigned int flags)
       inode_release(blkdrvr_inode);
     }
 
-  RELEASE_SEARCH(&desc);
+  inode_search_release(&desc);
 #ifdef CONFIG_FS_NOTIFY
   notify_unmount(target);
 #endif
@@ -208,7 +217,7 @@ errout_with_mountpt:
     }
 
 errout_with_search:
-  RELEASE_SEARCH(&desc);
+  inode_search_release(&desc);
 
 errout:
   return ret;
